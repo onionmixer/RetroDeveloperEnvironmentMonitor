@@ -237,10 +237,8 @@ static void process_network_data(void)
             /* Store in data store */
             datastore_process(&g_datastore, &data);
 
-            /* Update UI connection status on hello message */
-            if (strcmp(data.cat, "sys") == 0 &&
-                strcmp(data.sec, "conn") == 0 &&
-                strcmp(data.fld, "hello") == 0) {
+            /* Update UI connection status with emulator type from first message */
+            if (g_ui.emu_type[0] == '\0' && data.emu[0] != '\0') {
                 ui_set_connected(&g_ui, true, data.emu);
             }
 
