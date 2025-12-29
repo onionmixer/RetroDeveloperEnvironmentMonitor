@@ -1,0 +1,27 @@
+# rdemonitor configuration file
+#
+# This file configures the Retro Developer Environment Monitor.
+# Copy this file to ./rdemonitor.config or ~/.rdemonitor.config
+#
+# Search order:
+#   1. ./rdemonitor.config (current directory)
+#   2. ~/.rdemonitor.config (home directory)
+#
+# Command line arguments always take priority over config file settings.
+
+# Debug server address
+# The address of the emulator's debug server (AppleWin or openMSX)
+# Default: localhost
+debug_address=localhost
+
+# Debug server port
+# The TCP port of the emulator's debug server
+# Default: 6502
+debug_port=6502
+
+# Log all received data
+# When enabled, all received JSON data is logged to a timestamped file
+# File format: emulator_log_YYYYMMDDHHmmss.log
+# Values: true, false, 1, 0, yes, no
+# Default: false
+log_all=false

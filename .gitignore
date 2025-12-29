@@ -1,0 +1,21 @@
+# Build outputs
+rdemonitor
+obj/
+
+# Config files (user-specific)
+rdemonitor.config
+
+# Log and snapshot files
+*.log
+*.tsnap
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
