@@ -17,6 +17,28 @@ Retro Developer Environment Monitor - AppleWin/openMSX 에뮬레이터용 디버
 - **로그 기능**: 수신된 모든 데이터를 파일로 기록
 - **자동 재연결**: 연결 끊김 시 자동 재연결 시도
 
+## 스크린샷
+
+### MSX (openMSX)
+
+| Tab 1: Info | Tab 2: IO |
+|:-----------:|:---------:|
+| ![MSX Info](screenshot/MSX_01.png) | ![MSX IO](screenshot/MSX_02.png) |
+
+| Tab 3: CPU | Tab 4: Memory |
+|:----------:|:-------------:|
+| ![MSX CPU](screenshot/MSX_03.png) | ![MSX Memory](screenshot/MSX_04.png) |
+
+### Apple II (AppleWin)
+
+| Tab 1: Info | Tab 2: IO |
+|:-----------:|:---------:|
+| ![Apple II Info](screenshot/Appleii_01.png) | ![Apple II IO](screenshot/Appleii_02.png) |
+
+| Tab 3: CPU | Tab 4: Memory |
+|:----------:|:-------------:|
+| ![Apple II CPU](screenshot/Appleii_03.png) | ![Apple II Memory](screenshot/Appleii_04.png) |
+
 ## 빌드
 
 ### 의존성
@@ -246,7 +268,7 @@ RetroDeveloperEnvironmentMonitor/
 
 ## 라이선스
 
-이 프로젝트는 RetroDeveloperEnvironmentProject의 일부입니다.
+이 프로젝트는 [GNU General Public License v2.0](LICENSE) 하에 배포됩니다.
 
 ## 관련 문서
 
