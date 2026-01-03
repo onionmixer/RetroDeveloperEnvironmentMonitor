@@ -474,6 +474,185 @@ static void process_memory_byte(MemoryData *mem, const ParsedData *data)
     }
 }
 
+/* Helper function to parse space-separated hex data (e.g., "00 00 C6 00") */
+static int parse_hex_data_spaced(const char *hex_str, uint8_t *out, int max_bytes)
+{
+    if (hex_str == NULL) return 0;
+
+    int bytes = 0;
+    const char *p = hex_str;
+
+    while (*p && bytes < max_bytes) {
+        /* Skip whitespace */
+        while (*p == ' ') p++;
+        if (!*p) break;
+
+        /* Read two hex digits */
+        if (isxdigit(p[0]) && isxdigit(p[1])) {
+            char byte_str[3] = { p[0], p[1], '\0' };
+            out[bytes++] = (uint8_t)strtoul(byte_str, NULL, 16);
+            p += 2;
+        } else {
+            break;
+        }
+    }
+
+    return bytes;
+}
+
+/* Process Zero Page data (mem.zp) */
+static void process_zeropage(ZeroPageData *zp, const ParsedData *data)
+{
+    if (strcmp(data->fld, "data") != 0) return;
+    if (!data->has_addr) return;
+
+    uint32_t addr = parse_hex(data->addr);
+    if (addr >= ZP_SIZE) return;
+
+    uint8_t bytes[32];
+    int byte_count = parse_hex_data_spaced(data->val, bytes, sizeof(bytes));
+
+    for (int i = 0; i < byte_count && (addr + i) < ZP_SIZE; i++) {
+        zp->data[addr + i] = bytes[i];
+        zp->valid[addr + i] = 1;
+    }
+    zp->has_data = true;
+}
+
+/* Process Stack Page data (mem.stackpage) */
+static void process_stackpage(StackPageData *sp, const ParsedData *data)
+{
+    if (strcmp(data->fld, "data") != 0) return;
+    if (!data->has_addr) return;
+
+    uint32_t addr = parse_hex(data->addr);
+    /* Stack page is at $0100-$01FF, convert to 0-255 offset */
+    if (addr >= 0x0100 && addr < 0x0200) {
+        addr -= 0x0100;
+    } else if (addr >= STACK_PAGE_SIZE) {
+        return;
+    }
+
+    uint8_t bytes[32];
+    int byte_count = parse_hex_data_spaced(data->val, bytes, sizeof(bytes));
+
+    for (int i = 0; i < byte_count && (addr + i) < STACK_PAGE_SIZE; i++) {
+        sp->data[addr + i] = bytes[i];
+        sp->valid[addr + i] = 1;
+    }
+    sp->has_data = true;
+}
+
+/* Process Memory Flags (mem.flag) */
+static void process_memflags(MemFlagsData *mf, const ParsedData *data)
+{
+    /* Find existing flag or add new one */
+    int idx = -1;
+    for (int i = 0; i < mf->count; i++) {
+        if (strcmp(mf->flags[i].name, data->fld) == 0) {
+            idx = i;
+            break;
+        }
+    }
+
+    if (idx < 0 && mf->count < MEM_FLAG_MAX) {
+        idx = mf->count++;
+        safe_strcpy(mf->flags[idx].name, sizeof(mf->flags[idx].name), data->fld);
+    }
+
+    if (idx >= 0) {
+        safe_strcpy(mf->flags[idx].value, sizeof(mf->flags[idx].value), data->val);
+    }
+}
+
+/* Process Text Screen data (mem.text) */
+static void process_textscreen(TextScreenData *ts, const ParsedData *data)
+{
+    if (strcmp(data->fld, "page") == 0) {
+        ts->current_page = atoi(data->val);
+        ts->has_data = true;
+    }
+    else if (strcmp(data->fld, "row") == 0) {
+        if (!data->has_idx) return;
+
+        int row_idx = data->idx;
+        if (row_idx >= 0 && row_idx < TEXT_ROWS) {
+            /* Copy the row text, up to TEXT_COLS characters */
+            safe_strcpy(ts->rows[row_idx], TEXT_COLS + 1, data->val);
+
+            if (data->has_addr) {
+                ts->row_addr[row_idx] = (uint16_t)parse_hex(data->addr);
+            }
+            ts->row_valid[row_idx] = 1;
+            ts->has_data = true;
+        }
+    }
+}
+
+/* Process Annunciator data (io.ann) */
+static void process_annunciator(AnnunciatorData *ann, const ParsedData *data)
+{
+    if (strcmp(data->fld, "state") != 0) return;
+    if (!data->has_idx) return;
+
+    int idx = data->idx;
+    if (idx >= 0 && idx < ANN_COUNT) {
+        ann->state[idx] = (uint8_t)atoi(data->val);
+        ann->has_data = true;
+    }
+}
+
+/* Process Disassembly data (dbg.disasm) */
+static void process_disasm(DisasmData *dis, const ParsedData *data)
+{
+    if (strcmp(data->fld, "line") != 0) return;
+    if (!data->has_idx) return;
+
+    int idx = data->idx;
+    if (idx >= 0 && idx < DISASM_MAX_LINES) {
+        safe_strcpy(dis->lines[idx].instruction, sizeof(dis->lines[idx].instruction), data->val);
+
+        if (data->has_addr) {
+            safe_strcpy(dis->lines[idx].address, sizeof(dis->lines[idx].address), data->addr);
+        }
+        dis->lines[idx].idx = idx;
+
+        if (idx >= dis->count) {
+            dis->count = idx + 1;
+        }
+    }
+}
+
+/* Process CPU Stack data (cpu.stack) */
+static void process_cpustack(CPUStackData *cs, const ParsedData *data)
+{
+    if (strcmp(data->fld, "sp") == 0) {
+        safe_strcpy(cs->sp, sizeof(cs->sp), data->val);
+        cs->has_data = true;
+    }
+    else if (strcmp(data->fld, "depth") == 0) {
+        safe_strcpy(cs->depth, sizeof(cs->depth), data->val);
+        cs->has_data = true;
+    }
+    else if (strcmp(data->fld, "val") == 0) {
+        if (!data->has_idx) return;
+
+        int idx = data->idx;
+        if (idx >= 0 && idx < CPU_STACK_MAX_ENTRIES) {
+            safe_strcpy(cs->entries[idx].val, sizeof(cs->entries[idx].val), data->val);
+
+            if (data->has_addr) {
+                safe_strcpy(cs->entries[idx].addr, sizeof(cs->entries[idx].addr), data->addr);
+            }
+
+            if (idx >= cs->entry_count) {
+                cs->entry_count = idx + 1;
+            }
+            cs->has_data = true;
+        }
+    }
+}
+
 static void process_memory(MemoryData *mem, const ParsedData *data)
 {
     if (strcmp(data->sec, "dump") == 0) {
@@ -485,6 +664,7 @@ static void process_memory(MemoryData *mem, const ParsedData *data)
         }
         /* word reads could be handled similarly */
     }
+    /* Note: zp, stackpage, text, flag are handled in datastore_process */
 }
 
 /* Memory navigation functions */
@@ -570,6 +750,15 @@ void datastore_init(DataStore *ds)
     datastore_io_clear(&ds->io);
     datastore_cpu_clear(&ds->cpu);
     /* Memory is already zeroed */
+
+    /* AppleWin Extended Data (V01.1) */
+    datastore_zeropage_clear(&ds->zeropage);
+    datastore_stackpage_clear(&ds->stackpage);
+    datastore_memflags_clear(&ds->memflags);
+    datastore_textscreen_clear(&ds->textscreen);
+    datastore_annunciator_clear(&ds->annunciator);
+    datastore_disasm_clear(&ds->disasm);
+    datastore_cpustack_clear(&ds->cpustack);
 }
 
 void datastore_free(DataStore *ds)
@@ -583,6 +772,16 @@ void datastore_clear(DataStore *ds)
     datastore_io_clear(&ds->io);
     datastore_cpu_clear(&ds->cpu);
     datastore_memory_clear(&ds->memory);
+
+    /* AppleWin Extended Data (V01.1) */
+    datastore_zeropage_clear(&ds->zeropage);
+    datastore_stackpage_clear(&ds->stackpage);
+    datastore_memflags_clear(&ds->memflags);
+    datastore_textscreen_clear(&ds->textscreen);
+    datastore_annunciator_clear(&ds->annunciator);
+    datastore_disasm_clear(&ds->disasm);
+    datastore_cpustack_clear(&ds->cpustack);
+
     ds->total_messages = 0;
     ds->parse_errors = 0;
 }
@@ -605,14 +804,46 @@ void datastore_process(DataStore *ds, const ParsedData *data)
         /* CPU state goes to both info and cpu tabs */
         process_info_cpu_state(&ds->info, data);
         process_cpu(&ds->cpu, data);
+
+        /* V01.1: Handle cpu.stack section */
+        if (strcmp(data->sec, "stack") == 0) {
+            process_cpustack(&ds->cpustack, data);
+        }
     }
     else if (strcmp(data->cat, "io") == 0) {
         process_io(&ds->io, data);
+
+        /* V01.1: Handle io.ann section (annunciators) */
+        if (strcmp(data->sec, "ann") == 0) {
+            process_annunciator(&ds->annunciator, data);
+        }
     }
     else if (strcmp(data->cat, "mem") == 0) {
-        process_memory(&ds->memory, data);
+        /* V01.1: Route to extended memory handlers */
+        if (strcmp(data->sec, "zp") == 0) {
+            process_zeropage(&ds->zeropage, data);
+        }
+        else if (strcmp(data->sec, "stackpage") == 0) {
+            process_stackpage(&ds->stackpage, data);
+        }
+        else if (strcmp(data->sec, "flag") == 0) {
+            process_memflags(&ds->memflags, data);
+        }
+        else if (strcmp(data->sec, "text") == 0) {
+            process_textscreen(&ds->textscreen, data);
+        }
+        else {
+            /* dump, read, write sections go to memory tab */
+            process_memory(&ds->memory, data);
+        }
     }
-    /* dbg category could be handled for breakpoints, etc. */
+    else if (strcmp(data->cat, "dbg") == 0) {
+        /* V01.1: Handle dbg.disasm section */
+        if (strcmp(data->sec, "disasm") == 0) {
+            process_disasm(&ds->disasm, data);
+        }
+        /* Other dbg sections (bp, watch, trace) can be added here */
+    }
 }
 
 const InfoData *datastore_get_info(const DataStore *ds)
@@ -633,4 +864,87 @@ const CPUData *datastore_get_cpu(const DataStore *ds)
 const MemoryData *datastore_get_memory(const DataStore *ds)
 {
     return &ds->memory;
+}
+
+/*
+ * =============================================================================
+ * AppleWin Extended Data Functions (V01.1)
+ * =============================================================================
+ */
+
+/* Zero Page Functions */
+void datastore_zeropage_clear(ZeroPageData *zp)
+{
+    memset(zp, 0, sizeof(ZeroPageData));
+}
+
+const ZeroPageData *datastore_get_zeropage(const DataStore *ds)
+{
+    return &ds->zeropage;
+}
+
+/* Stack Page Functions */
+void datastore_stackpage_clear(StackPageData *sp)
+{
+    memset(sp, 0, sizeof(StackPageData));
+}
+
+const StackPageData *datastore_get_stackpage(const DataStore *ds)
+{
+    return &ds->stackpage;
+}
+
+/* Memory Flags Functions */
+void datastore_memflags_clear(MemFlagsData *mf)
+{
+    memset(mf, 0, sizeof(MemFlagsData));
+}
+
+const MemFlagsData *datastore_get_memflags(const DataStore *ds)
+{
+    return &ds->memflags;
+}
+
+/* Text Screen Functions */
+void datastore_textscreen_clear(TextScreenData *ts)
+{
+    memset(ts, 0, sizeof(TextScreenData));
+}
+
+const TextScreenData *datastore_get_textscreen(const DataStore *ds)
+{
+    return &ds->textscreen;
+}
+
+/* Annunciator Functions */
+void datastore_annunciator_clear(AnnunciatorData *ann)
+{
+    memset(ann, 0, sizeof(AnnunciatorData));
+}
+
+const AnnunciatorData *datastore_get_annunciator(const DataStore *ds)
+{
+    return &ds->annunciator;
+}
+
+/* Disassembly Functions */
+void datastore_disasm_clear(DisasmData *dis)
+{
+    memset(dis, 0, sizeof(DisasmData));
+}
+
+const DisasmData *datastore_get_disasm(const DataStore *ds)
+{
+    return &ds->disasm;
+}
+
+/* CPU Stack Functions */
+void datastore_cpustack_clear(CPUStackData *cs)
+{
+    memset(cs, 0, sizeof(CPUStackData));
+}
+
+const CPUStackData *datastore_get_cpustack(const DataStore *ds)
+{
+    return &ds->cpustack;
 }

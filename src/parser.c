@@ -6,6 +6,7 @@
 
 #include "parser.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <cjson/cJSON.h>
 
@@ -82,6 +83,9 @@ int parser_parse_line(const char *json_line, ParsedData *data)
     if (cJSON_IsNumber(idx)) {
         data->idx = (int)idx->valuedouble;
         data->has_idx = true;
+    } else if (cJSON_IsString(idx) && idx->valuestring != NULL) {
+        data->idx = (int)strtol(idx->valuestring, NULL, 10);
+        data->has_idx = true;
     }
 
     cJSON *ts = cJSON_GetObjectItemCaseSensitive(root, "ts");
@@ -93,6 +97,9 @@ int parser_parse_line(const char *json_line, ParsedData *data)
     cJSON *len = cJSON_GetObjectItemCaseSensitive(root, "len");
     if (cJSON_IsNumber(len)) {
         data->len = (int)len->valuedouble;
+        data->has_len = true;
+    } else if (cJSON_IsString(len) && len->valuestring != NULL) {
+        data->len = (int)strtol(len->valuestring, NULL, 10);
         data->has_len = true;
     }
 

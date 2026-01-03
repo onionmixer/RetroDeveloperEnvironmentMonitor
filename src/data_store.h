@@ -136,6 +136,85 @@ typedef struct {
 
 /*
  * =============================================================================
+ * AppleWin Extended Data (V01.1 - 65501-65504 compatibility)
+ * =============================================================================
+ */
+
+/* Zero Page data (mem.zp) - $0000-$00FF */
+#define ZP_SIZE 256
+typedef struct {
+    uint8_t  data[ZP_SIZE];
+    uint8_t  valid[ZP_SIZE];
+    bool     has_data;
+} ZeroPageData;
+
+/* Stack Page data (mem.stackpage) - $0100-$01FF */
+#define STACK_PAGE_SIZE 256
+typedef struct {
+    uint8_t  data[STACK_PAGE_SIZE];
+    uint8_t  valid[STACK_PAGE_SIZE];
+    bool     has_data;
+} StackPageData;
+
+/* Memory flags (mem.flag) - AppleWin soft switches state */
+#define MEM_FLAG_MAX 16
+typedef struct {
+    char name[32];
+    char value[8];
+} MemFlagEntry;
+
+typedef struct {
+    MemFlagEntry flags[MEM_FLAG_MAX];
+    int count;
+} MemFlagsData;
+
+/* Text screen data (mem.text) - 24 rows x 40 columns */
+#define TEXT_ROWS 24
+#define TEXT_COLS 40
+typedef struct {
+    char rows[TEXT_ROWS][TEXT_COLS + 1];  /* +1 for null terminator */
+    uint16_t row_addr[TEXT_ROWS];          /* Address of each row */
+    uint8_t row_valid[TEXT_ROWS];          /* Which rows are valid */
+    int current_page;                       /* Text page (1 or 2) */
+    bool has_data;
+} TextScreenData;
+
+/* Annunciator data (io.ann) - 4 annunciators */
+#define ANN_COUNT 4
+typedef struct {
+    uint8_t state[ANN_COUNT];   /* 0 or 1 for each annunciator */
+    bool has_data;
+} AnnunciatorData;
+
+/* Disassembly data (dbg.disasm) */
+#define DISASM_MAX_LINES 64
+typedef struct {
+    char instruction[64];
+    char address[8];
+    int idx;
+} DisasmLine;
+
+typedef struct {
+    DisasmLine lines[DISASM_MAX_LINES];
+    int count;
+    int scroll_pos;
+} DisasmData;
+
+/* CPU Stack data (cpu.stack) */
+#define CPU_STACK_MAX_ENTRIES 32
+typedef struct {
+    char sp[8];                              /* Stack pointer value */
+    char depth[8];                           /* Stack depth */
+    struct {
+        char val[8];
+        char addr[8];
+    } entries[CPU_STACK_MAX_ENTRIES];
+    int entry_count;
+    bool has_data;
+} CPUStackData;
+
+/*
+ * =============================================================================
  * Global Data Store
  * =============================================================================
  */
@@ -145,6 +224,15 @@ typedef struct {
     IOData     io;
     CPUData    cpu;
     MemoryData memory;
+
+    /* AppleWin Extended Data (V01.1) */
+    ZeroPageData   zeropage;
+    StackPageData  stackpage;
+    MemFlagsData   memflags;
+    TextScreenData textscreen;
+    AnnunciatorData annunciator;
+    DisasmData     disasm;
+    CPUStackData   cpustack;
 
     /* Statistics */
     unsigned long total_messages;
@@ -234,5 +322,39 @@ const MemLine *datastore_memory_get_line(const MemoryData *mem, int index);
 
 /* Find line index for a specific address (returns -1 if not found) */
 int datastore_memory_find_addr(const MemoryData *mem, uint32_t addr);
+
+/*
+ * -----------------------------------------------------------------------------
+ * AppleWin Extended Data Functions (V01.1)
+ * -----------------------------------------------------------------------------
+ */
+
+/* Zero Page */
+void datastore_zeropage_clear(ZeroPageData *zp);
+const ZeroPageData *datastore_get_zeropage(const DataStore *ds);
+
+/* Stack Page */
+void datastore_stackpage_clear(StackPageData *sp);
+const StackPageData *datastore_get_stackpage(const DataStore *ds);
+
+/* Memory Flags */
+void datastore_memflags_clear(MemFlagsData *mf);
+const MemFlagsData *datastore_get_memflags(const DataStore *ds);
+
+/* Text Screen */
+void datastore_textscreen_clear(TextScreenData *ts);
+const TextScreenData *datastore_get_textscreen(const DataStore *ds);
+
+/* Annunciator */
+void datastore_annunciator_clear(AnnunciatorData *ann);
+const AnnunciatorData *datastore_get_annunciator(const DataStore *ds);
+
+/* Disassembly */
+void datastore_disasm_clear(DisasmData *dis);
+const DisasmData *datastore_get_disasm(const DataStore *ds);
+
+/* CPU Stack */
+void datastore_cpustack_clear(CPUStackData *cs);
+const CPUStackData *datastore_get_cpustack(const DataStore *ds);
 
 #endif /* DATA_STORE_H */

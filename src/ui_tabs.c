@@ -317,6 +317,7 @@ void tabs_draw_cpu(UIContext *ctx)
     WINDOW *win = ctx->win_content;
     const CPUData *cpu = datastore_get_cpu(ctx->datastore);
     const InfoData *info = datastore_get_info(ctx->datastore);
+    const CPUStackData *cpustack = datastore_get_cpustack(ctx->datastore);
     const char *search = ui_get_search_term(ctx);
     int width, height;
     ui_get_content_size(ctx, &width, &height);
@@ -463,6 +464,39 @@ void tabs_draw_cpu(UIContext *ctx)
     }
     if (!has_state_data) {
         mvwprintw(win, y++, 2, "(no state data)");
+    }
+
+    /* V01.1: CPU Stack section (AppleWin only) */
+    if (cpustack->has_data && y < height - 5) {
+        y++;
+        draw_separator(win, y++, width, "Stack");
+        y++;
+
+        char line[128];
+        snprintf(line, sizeof(line), "SP: %s  Depth: %s",
+                 cpustack->sp[0] ? cpustack->sp : "--",
+                 cpustack->depth[0] ? cpustack->depth : "--");
+        tabs_draw_with_highlight(win, y++, 2, line, search);
+
+        /* Show stack entries (up to visible space) */
+        int max_entries = height - y - 1;
+        if (max_entries > cpustack->entry_count) {
+            max_entries = cpustack->entry_count;
+        }
+        if (max_entries > 8) {
+            max_entries = 8;  /* Limit display to 8 entries */
+        }
+
+        for (int i = 0; i < max_entries; i++) {
+            snprintf(line, sizeof(line), "  [%s]: %s",
+                     cpustack->entries[i].addr[0] ? cpustack->entries[i].addr : "----",
+                     cpustack->entries[i].val[0] ? cpustack->entries[i].val : "--");
+            tabs_draw_with_highlight(win, y++, 2, line, search);
+        }
+
+        if (cpustack->entry_count > max_entries) {
+            mvwprintw(win, y++, 2, "  ... (%d more)", cpustack->entry_count - max_entries);
+        }
     }
 
     wrefresh(win);
