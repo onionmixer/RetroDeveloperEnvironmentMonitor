@@ -157,6 +157,8 @@ log_all=false
 - CPU 타입 (6502/65C02/Z80/R800)
 - 실행 상태, 비디오 모드
 - 연결 시간, 메시지 통계
+- **[V01.1]** Memory Flags (AppleWin: 80store, auxRead 등)
+- **[V01.1]** Text Screen 미리보기 (상위 4줄)
 
 ### Tab 2: IO (입출력)
 
@@ -165,6 +167,7 @@ I/O 포트 및 소프트 스위치 정보를 표시합니다.
 - 최대 2048개 항목 버퍼
 - 최신 데이터가 아래쪽에 표시
 - 동일한 주소의 데이터는 업데이트 (replace)
+- **[V01.1]** Annunciator 상태 (AppleWin: ANN0~ANN3)
 
 ### Tab 3: CPU (레지스터)
 
@@ -173,6 +176,8 @@ CPU 레지스터, 플래그, 인터럽트 상태를 표시합니다.
 - 6502/65C02 (Apple): A, X, Y, SP, PC, P, 플래그
 - Z80/R800 (MSX): AF, BC, DE, HL, IX, IY, SP, PC, 플래그
 - 동일 레지스터는 값만 업데이트 (replace)
+- **[V01.1]** CPU Stack (AppleWin: SP, Depth, 스택 엔트리)
+- **[V01.1]** Disassembly (역어셈블 라인)
 
 ### Tab 4: Memory (메모리)
 
@@ -183,6 +188,8 @@ Hex 에디터 스타일로 메모리 덤프를 표시합니다.
 - 스크롤 지원 (키보드 네비게이션)
 - 동일 주소의 데이터는 업데이트 (replace)
 - 무제한 메모리 라인 저장
+- **[V01.1]** Zero Page 요약 (상위 16바이트)
+- **[V01.1]** Stack Page 요약 (상위 16바이트)
 
 ## 파일 출력
 
@@ -221,7 +228,19 @@ Hex 에디터 스타일로 메모리 덤프를 표시합니다.
 | `cpu` | CPU 상태 | CPU |
 | `io` | 입출력 | IO |
 | `mem` | 메모리 | Memory |
-| `dbg` | 디버거 | - |
+| `dbg` | 디버거 | CPU |
+
+### V01.1 확장 섹션 (AppleWin)
+
+| cat | sec | 설명 | 저장 탭 |
+|-----|-----|------|--------|
+| `mem` | `zp` | Zero Page 덤프 | Memory |
+| `mem` | `stackpage` | Stack Page 덤프 | Memory |
+| `mem` | `flag` | 메모리 플래그 | Info |
+| `mem` | `text` | 텍스트 화면 | Info |
+| `io` | `ann` | 어나운시에이터 | IO |
+| `dbg` | `disasm` | 역어셈블 | CPU |
+| `cpu` | `stack` | CPU 스택 | CPU |
 
 ## 문제 해결
 
