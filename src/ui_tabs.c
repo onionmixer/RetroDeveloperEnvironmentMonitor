@@ -129,6 +129,8 @@ void tabs_draw_info(UIContext *ctx)
 {
     WINDOW *win = ctx->win_content;
     const InfoData *info = datastore_get_info(ctx->datastore);
+    const MemFlagsData *memflags = datastore_get_memflags(ctx->datastore);
+    const TextScreenData *textscreen = datastore_get_textscreen(ctx->datastore);
     const char *search = ui_get_search_term(ctx);
     int width, height;
     ui_get_content_size(ctx, &width, &height);
@@ -253,6 +255,48 @@ void tabs_draw_info(UIContext *ctx)
     mvwprintw(win, y, 2, "Parse Errors: ");
     wattroff(win, COLOR_PAIR(COLOR_PAIR_HEADER));
     wprintw(win, "%lu", ctx->datastore->parse_errors);
+    y++;
+
+    /* V01.1: Memory Flags (AppleWin) */
+    if (memflags->count > 0 && y < height - 4) {
+        y++;
+        draw_separator(win, y++, width, "Memory Flags");
+        y++;
+
+        char line[256] = "";
+        int line_len = 0;
+        for (int i = 0; i < memflags->count && line_len < 200; i++) {
+            int added = snprintf(line + line_len, sizeof(line) - line_len,
+                                "%s:%s  ", memflags->flags[i].name, memflags->flags[i].value);
+            line_len += added;
+        }
+        if (line_len > 0) {
+            tabs_draw_with_highlight(win, y++, 2, line, search);
+        }
+    }
+
+    /* V01.1: Text Screen Preview (AppleWin) */
+    if (textscreen->has_data && y < height - 6) {
+        y++;
+        char header[32];
+        snprintf(header, sizeof(header), "Text Screen (Page %d)", textscreen->current_page);
+        draw_separator(win, y++, width, header);
+        y++;
+
+        /* Show first 4 rows as preview */
+        int preview_rows = 4;
+        if (height - y - 1 < preview_rows) {
+            preview_rows = height - y - 1;
+        }
+        for (int i = 0; i < preview_rows && i < TEXT_ROWS; i++) {
+            if (textscreen->row_valid[i]) {
+                mvwprintw(win, y++, 2, "%.40s", textscreen->rows[i]);
+            }
+        }
+        if (preview_rows < TEXT_ROWS) {
+            mvwprintw(win, y++, 2, "... (%d more rows)", TEXT_ROWS - preview_rows);
+        }
+    }
 
     wrefresh(win);
 }
@@ -261,6 +305,7 @@ void tabs_draw_io(UIContext *ctx)
 {
     WINDOW *win = ctx->win_content;
     const IOData *io = datastore_get_io(ctx->datastore);
+    const AnnunciatorData *ann = datastore_get_annunciator(ctx->datastore);
     const char *search = ui_get_search_term(ctx);
     int width, height;
     ui_get_content_size(ctx, &width, &height);
@@ -269,14 +314,31 @@ void tabs_draw_io(UIContext *ctx)
 
     int y = 0;
 
+    /* V01.1: Annunciator section (AppleWin) */
+    if (ann->has_data) {
+        draw_separator(win, y++, width, "Annunciators");
+        y++;
+
+        char line[64];
+        snprintf(line, sizeof(line), "ANN0:%d  ANN1:%d  ANN2:%d  ANN3:%d",
+                 ann->state[0], ann->state[1], ann->state[2], ann->state[3]);
+        tabs_draw_with_highlight(win, y++, 2, line, search);
+        y++;
+    }
+
     /* Header */
     char header[64];
     snprintf(header, sizeof(header), "I/O (%d entries)", io->count);
     draw_separator(win, y++, width, header);
     y++;
 
-    if (io->count == 0) {
+    if (io->count == 0 && !ann->has_data) {
         mvwprintw(win, y, 2, "No I/O data received yet.");
+        wrefresh(win);
+        return;
+    }
+
+    if (io->count == 0) {
         wrefresh(win);
         return;
     }
@@ -318,6 +380,7 @@ void tabs_draw_cpu(UIContext *ctx)
     const CPUData *cpu = datastore_get_cpu(ctx->datastore);
     const InfoData *info = datastore_get_info(ctx->datastore);
     const CPUStackData *cpustack = datastore_get_cpustack(ctx->datastore);
+    const DisasmData *disasm = datastore_get_disasm(ctx->datastore);
     const char *search = ui_get_search_term(ctx);
     int width, height;
     ui_get_content_size(ctx, &width, &height);
@@ -499,6 +562,33 @@ void tabs_draw_cpu(UIContext *ctx)
         }
     }
 
+    /* V01.1: Disassembly section (AppleWin) */
+    if (disasm->count > 0 && y < height - 4) {
+        y++;
+        draw_separator(win, y++, width, "Disassembly");
+        y++;
+
+        int max_lines = height - y - 1;
+        if (max_lines > disasm->count) {
+            max_lines = disasm->count;
+        }
+        if (max_lines > 8) {
+            max_lines = 8;  /* Limit display */
+        }
+
+        for (int i = 0; i < max_lines; i++) {
+            char line[128];
+            snprintf(line, sizeof(line), "%s: %s",
+                     disasm->lines[i].address[0] ? disasm->lines[i].address : "----",
+                     disasm->lines[i].instruction);
+            tabs_draw_with_highlight(win, y++, 2, line, search);
+        }
+
+        if (disasm->count > max_lines) {
+            mvwprintw(win, y++, 2, "... (%d more)", disasm->count - max_lines);
+        }
+    }
+
     wrefresh(win);
 }
 
@@ -506,6 +596,8 @@ void tabs_draw_memory(UIContext *ctx)
 {
     WINDOW *win = ctx->win_content;
     MemoryData *mem = (MemoryData *)datastore_get_memory(ctx->datastore);
+    const ZeroPageData *zp = datastore_get_zeropage(ctx->datastore);
+    const StackPageData *sp = datastore_get_stackpage(ctx->datastore);
     const char *search = ui_get_search_term(ctx);
     int width, height;
     ui_get_content_size(ctx, &width, &height);
@@ -513,6 +605,42 @@ void tabs_draw_memory(UIContext *ctx)
     werase(win);
 
     int y = 0;
+
+    /* V01.1: Zero Page and Stack Page summary (AppleWin) */
+    if (zp->has_data || sp->has_data) {
+        draw_separator(win, y++, width, "Special Pages");
+
+        if (zp->has_data) {
+            /* Show first 16 bytes of Zero Page */
+            char zp_line[64];
+            int zp_len = 0;
+            zp_len += snprintf(zp_line + zp_len, sizeof(zp_line) - zp_len, "ZP: ");
+            for (int i = 0; i < 16 && i < ZP_SIZE; i++) {
+                if (zp->valid[i]) {
+                    zp_len += snprintf(zp_line + zp_len, sizeof(zp_line) - zp_len, "%02X ", zp->data[i]);
+                } else {
+                    zp_len += snprintf(zp_line + zp_len, sizeof(zp_line) - zp_len, "-- ");
+                }
+            }
+            tabs_draw_with_highlight(win, y++, 2, zp_line, search);
+        }
+
+        if (sp->has_data) {
+            /* Show first 16 bytes of Stack Page */
+            char sp_line[64];
+            int sp_len = 0;
+            sp_len += snprintf(sp_line + sp_len, sizeof(sp_line) - sp_len, "SP: ");
+            for (int i = 0; i < 16 && i < STACK_PAGE_SIZE; i++) {
+                if (sp->valid[i]) {
+                    sp_len += snprintf(sp_line + sp_len, sizeof(sp_line) - sp_len, "%02X ", sp->data[i]);
+                } else {
+                    sp_len += snprintf(sp_line + sp_len, sizeof(sp_line) - sp_len, "-- ");
+                }
+            }
+            tabs_draw_with_highlight(win, y++, 2, sp_line, search);
+        }
+        y++;
+    }
 
     /* Header with address range */
     char header[64];
@@ -524,8 +652,13 @@ void tabs_draw_memory(UIContext *ctx)
     }
     draw_separator(win, y++, width, header);
 
-    if (mem->count == 0) {
+    if (mem->count == 0 && !zp->has_data && !sp->has_data) {
         mvwprintw(win, y + 1, 2, "No memory data received yet.");
+        wrefresh(win);
+        return;
+    }
+
+    if (mem->count == 0) {
         wrefresh(win);
         return;
     }
