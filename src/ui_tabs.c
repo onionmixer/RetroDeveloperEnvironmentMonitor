@@ -616,6 +616,7 @@ void tabs_draw_memory(UIContext *ctx)
         for (int i = 0; i < 16; i++) {
             wprintw(win, "%02X ", i);
         }
+        wprintw(win, " ASCII");
         wattroff(win, COLOR_PAIR(COLOR_PAIR_HEADER) | A_DIM);
         y++;
 
@@ -628,17 +629,28 @@ void tabs_draw_memory(UIContext *ctx)
 
             /* Hex data */
             char hex_line[64];
+            char ascii_part[20];
             int hex_len = 0;
             for (int i = 0; i < 16; i++) {
                 int idx = line * 16 + i;
                 if (zp->valid[idx]) {
                     hex_len += snprintf(hex_line + hex_len, sizeof(hex_line) - hex_len,
                                        "%02X ", zp->data[idx]);
+                    unsigned char c = zp->data[idx];
+                    ascii_part[i] = (c >= 32 && c < 127) ? c : '.';
                 } else {
                     hex_len += snprintf(hex_line + hex_len, sizeof(hex_line) - hex_len, "-- ");
+                    ascii_part[i] = ' ';
                 }
             }
+            ascii_part[16] = '\0';
             tabs_draw_with_highlight(win, y, 7, hex_line, search);
+
+            /* Draw ASCII */
+            wattron(win, A_DIM);
+            mvwprintw(win, y, 7 + 48 + 1, "%s", ascii_part);
+            wattroff(win, A_DIM);
+
             y++;
         }
         y++;
@@ -654,6 +666,7 @@ void tabs_draw_memory(UIContext *ctx)
         for (int i = 0; i < 16; i++) {
             wprintw(win, "%02X ", i);
         }
+        wprintw(win, " ASCII");
         wattroff(win, COLOR_PAIR(COLOR_PAIR_HEADER) | A_DIM);
         y++;
 
@@ -666,17 +679,28 @@ void tabs_draw_memory(UIContext *ctx)
 
             /* Hex data */
             char hex_line[64];
+            char ascii_part[20];
             int hex_len = 0;
             for (int i = 0; i < 16; i++) {
                 int idx = line * 16 + i;
                 if (sp->valid[idx]) {
                     hex_len += snprintf(hex_line + hex_len, sizeof(hex_line) - hex_len,
                                        "%02X ", sp->data[idx]);
+                    unsigned char c = sp->data[idx];
+                    ascii_part[i] = (c >= 32 && c < 127) ? c : '.';
                 } else {
                     hex_len += snprintf(hex_line + hex_len, sizeof(hex_line) - hex_len, "-- ");
+                    ascii_part[i] = ' ';
                 }
             }
+            ascii_part[16] = '\0';
             tabs_draw_with_highlight(win, y, 8, hex_line, search);
+
+            /* Draw ASCII */
+            wattron(win, A_DIM);
+            mvwprintw(win, y, 8 + 48 + 1, "%s", ascii_part);
+            wattroff(win, A_DIM);
+
             y++;
         }
         y++;
