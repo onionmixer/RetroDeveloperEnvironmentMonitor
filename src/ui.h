@@ -19,7 +19,7 @@
  */
 
 #define UI_STATUS_BAR_HEIGHT    1
-#define UI_TAB_BAR_HEIGHT       1
+#define UI_TAB_BAR_HEIGHT       2
 #define UI_HELP_BAR_HEIGHT      1
 #define UI_MIN_WIDTH            80
 #define UI_MIN_HEIGHT           24
@@ -47,6 +47,7 @@ typedef enum {
     TAB_IO,
     TAB_CPU,
     TAB_MEMORY,
+    TAB_TEXT,
     TAB_COUNT
 } TabType;
 

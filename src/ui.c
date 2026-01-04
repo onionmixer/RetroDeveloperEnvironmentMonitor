@@ -111,14 +111,21 @@ static void draw_status_bar(UIContext *ctx)
 static void draw_tab_bar(UIContext *ctx)
 {
     static const char *tab_names[] = {
-        "1:Info", "2:IO", "3:CPU", "4:Memory"
+        "1:Info", "2:IO", "3:CPU", "4:Memory", "5:Text"
     };
 
     werase(ctx->win_tabs);
     wbkgd(ctx->win_tabs, COLOR_PAIR(COLOR_PAIR_TAB_INACTIVE));
 
+    /* First line: tab names */
     int x = 1;
+    int tab_positions[TAB_COUNT];  /* Store x position for each tab */
+    int tab_widths[TAB_COUNT];     /* Store width for each tab */
+
     for (int i = 0; i < TAB_COUNT; i++) {
+        tab_positions[i] = x;
+        tab_widths[i] = strlen(tab_names[i]) + 5;
+
         wmove(ctx->win_tabs, 0, x);
 
         if (i == (int)ctx->current_tab) {
@@ -129,7 +136,30 @@ static void draw_tab_bar(UIContext *ctx)
             wprintw(ctx->win_tabs, "  %s  ", tab_names[i]);
         }
 
-        x += strlen(tab_names[i]) + 5;
+        x += tab_widths[i];
+    }
+
+    /* Second line: message counts for tabs 2-5 (IO, CPU, Memory, Text) */
+    unsigned long counts[TAB_COUNT] = {
+        0,                              /* Tab 1: Info (no count) */
+        ctx->datastore->io_messages,    /* Tab 2: IO */
+        ctx->datastore->cpu_messages,   /* Tab 3: CPU */
+        ctx->datastore->mem_messages,   /* Tab 4: Memory */
+        ctx->datastore->text_messages   /* Tab 5: Text */
+    };
+
+    for (int i = 1; i < TAB_COUNT; i++) {  /* Skip tab 0 (Info) */
+        char count_str[32];
+        snprintf(count_str, sizeof(count_str), "%lu", counts[i]);
+
+        /* Center the count under the tab name */
+        int count_len = strlen(count_str);
+        int center_x = tab_positions[i] + (tab_widths[i] - count_len) / 2;
+
+        wmove(ctx->win_tabs, 1, center_x);
+        wattron(ctx->win_tabs, A_DIM);
+        wprintw(ctx->win_tabs, "%s", count_str);
+        wattroff(ctx->win_tabs, A_DIM);
     }
 
     wrefresh(ctx->win_tabs);
@@ -147,10 +177,10 @@ static void draw_help_bar(UIContext *ctx)
         wprintw(ctx->win_help, "Enter: Search | ESC: Cancel");
     } else if (ctx->current_tab == TAB_MEMORY) {
         wprintw(ctx->win_help,
-                "!@#$:Tab | f:Search | s:Snap | Up/Dn/PgUp/PgDn/Home/End:Scroll | q:Quit");
+                "1-5:Tab | f:Search | s:Snap | Up/Dn/PgUp/PgDn/Home/End:Scroll | q:Quit");
     } else {
         wprintw(ctx->win_help,
-                "!@#$:Tab | f:Search | s:Snapshot | q:Quit");
+                "1-5:Tab | f:Search | s:Snapshot | q:Quit");
     }
 
     /* Show status message if present and not expired (5 seconds) */
@@ -479,6 +509,9 @@ int ui_handle_input(UIContext *ctx, int ch)
         case '$':
             ui_switch_tab(ctx, TAB_MEMORY);
             break;
+        case '%':
+            ui_switch_tab(ctx, TAB_TEXT);
+            break;
 
         /* Also support direct number keys for convenience */
         case '1':
@@ -492,6 +525,9 @@ int ui_handle_input(UIContext *ctx, int ch)
             break;
         case '4':
             ui_switch_tab(ctx, TAB_MEMORY);
+            break;
+        case '5':
+            ui_switch_tab(ctx, TAB_TEXT);
             break;
 
         case 'f':

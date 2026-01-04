@@ -784,6 +784,10 @@ void datastore_clear(DataStore *ds)
 
     ds->total_messages = 0;
     ds->parse_errors = 0;
+    ds->io_messages = 0;
+    ds->cpu_messages = 0;
+    ds->mem_messages = 0;
+    ds->text_messages = 0;
 }
 
 void datastore_process(DataStore *ds, const ParsedData *data)
@@ -804,6 +808,7 @@ void datastore_process(DataStore *ds, const ParsedData *data)
         /* CPU state goes to both info and cpu tabs */
         process_info_cpu_state(&ds->info, data);
         process_cpu(&ds->cpu, data);
+        ds->cpu_messages++;
 
         /* V01.1: Handle cpu.stack section */
         if (strcmp(data->sec, "stack") == 0) {
@@ -812,6 +817,7 @@ void datastore_process(DataStore *ds, const ParsedData *data)
     }
     else if (strcmp(data->cat, "io") == 0) {
         process_io(&ds->io, data);
+        ds->io_messages++;
 
         /* V01.1: Handle io.ann section (annunciators) */
         if (strcmp(data->sec, "ann") == 0) {
@@ -822,19 +828,24 @@ void datastore_process(DataStore *ds, const ParsedData *data)
         /* V01.1: Route to extended memory handlers */
         if (strcmp(data->sec, "zp") == 0) {
             process_zeropage(&ds->zeropage, data);
+            ds->mem_messages++;
         }
         else if (strcmp(data->sec, "stackpage") == 0) {
             process_stackpage(&ds->stackpage, data);
+            ds->mem_messages++;
         }
         else if (strcmp(data->sec, "flag") == 0) {
             process_memflags(&ds->memflags, data);
+            ds->mem_messages++;
         }
         else if (strcmp(data->sec, "text") == 0) {
             process_textscreen(&ds->textscreen, data);
+            ds->text_messages++;
         }
         else {
             /* dump, read, write sections go to memory tab */
             process_memory(&ds->memory, data);
+            ds->mem_messages++;
         }
     }
     else if (strcmp(data->cat, "dbg") == 0) {

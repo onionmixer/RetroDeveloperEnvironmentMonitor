@@ -35,6 +35,11 @@ void tabs_draw_cpu(UIContext *ctx);
 void tabs_draw_memory(UIContext *ctx);
 
 /*
+ * Tab 5: Text - Draw Apple II text screen
+ */
+void tabs_draw_text(UIContext *ctx);
+
+/*
  * Memory tab scrolling
  */
 void tabs_memory_scroll(UIContext *ctx, int lines);

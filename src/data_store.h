@@ -237,6 +237,12 @@ typedef struct {
     /* Statistics */
     unsigned long total_messages;
     unsigned long parse_errors;
+
+    /* Per-tab message counters (for tabs 2-5) */
+    unsigned long io_messages;      /* Tab 2: IO */
+    unsigned long cpu_messages;     /* Tab 3: CPU */
+    unsigned long mem_messages;     /* Tab 4: Memory */
+    unsigned long text_messages;    /* Tab 5: Text */
 } DataStore;
 
 /*

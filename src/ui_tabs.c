@@ -120,6 +120,9 @@ void tabs_draw_content(UIContext *ctx)
         case TAB_MEMORY:
             tabs_draw_memory(ctx);
             break;
+        case TAB_TEXT:
+            tabs_draw_text(ctx);
+            break;
         default:
             break;
     }
@@ -130,7 +133,6 @@ void tabs_draw_info(UIContext *ctx)
     WINDOW *win = ctx->win_content;
     const InfoData *info = datastore_get_info(ctx->datastore);
     const MemFlagsData *memflags = datastore_get_memflags(ctx->datastore);
-    const TextScreenData *textscreen = datastore_get_textscreen(ctx->datastore);
     const char *search = ui_get_search_term(ctx);
     int width, height;
     ui_get_content_size(ctx, &width, &height);
@@ -272,29 +274,6 @@ void tabs_draw_info(UIContext *ctx)
         }
         if (line_len > 0) {
             tabs_draw_with_highlight(win, y++, 2, line, search);
-        }
-    }
-
-    /* V01.1: Text Screen Preview (AppleWin) */
-    if (textscreen->has_data && y < height - 6) {
-        y++;
-        char header[32];
-        snprintf(header, sizeof(header), "Text Screen (Page %d)", textscreen->current_page);
-        draw_separator(win, y++, width, header);
-        y++;
-
-        /* Show first 4 rows as preview */
-        int preview_rows = 4;
-        if (height - y - 1 < preview_rows) {
-            preview_rows = height - y - 1;
-        }
-        for (int i = 0; i < preview_rows && i < TEXT_ROWS; i++) {
-            if (textscreen->row_valid[i]) {
-                mvwprintw(win, y++, 2, "%.40s", textscreen->rows[i]);
-            }
-        }
-        if (preview_rows < TEXT_ROWS) {
-            mvwprintw(win, y++, 2, "... (%d more rows)", TEXT_ROWS - preview_rows);
         }
     }
 
@@ -598,6 +577,7 @@ void tabs_draw_memory(UIContext *ctx)
     MemoryData *mem = (MemoryData *)datastore_get_memory(ctx->datastore);
     const ZeroPageData *zp = datastore_get_zeropage(ctx->datastore);
     const StackPageData *sp = datastore_get_stackpage(ctx->datastore);
+    const MemFlagsData *mf = datastore_get_memflags(ctx->datastore);
     const char *search = ui_get_search_term(ctx);
     int width, height;
     ui_get_content_size(ctx, &width, &height);
@@ -606,38 +586,98 @@ void tabs_draw_memory(UIContext *ctx)
 
     int y = 0;
 
-    /* V01.1: Zero Page and Stack Page summary (AppleWin) */
-    if (zp->has_data || sp->has_data) {
-        draw_separator(win, y++, width, "Special Pages");
+    /* V01.1: Memory Flags (AppleWin soft switches) */
+    if (mf->count > 0) {
+        draw_separator(win, y++, width, "Memory Flags");
 
-        if (zp->has_data) {
-            /* Show first 16 bytes of Zero Page */
-            char zp_line[64];
-            int zp_len = 0;
-            zp_len += snprintf(zp_line + zp_len, sizeof(zp_line) - zp_len, "ZP: ");
-            for (int i = 0; i < 16 && i < ZP_SIZE; i++) {
-                if (zp->valid[i]) {
-                    zp_len += snprintf(zp_line + zp_len, sizeof(zp_line) - zp_len, "%02X ", zp->data[i]);
-                } else {
-                    zp_len += snprintf(zp_line + zp_len, sizeof(zp_line) - zp_len, "-- ");
-                }
-            }
-            tabs_draw_with_highlight(win, y++, 2, zp_line, search);
+        /* Display flags in compact format: name=val name=val ... */
+        char flags_line[256];
+        int flags_len = 0;
+        for (int i = 0; i < mf->count; i++) {
+            int need = snprintf(NULL, 0, "%s=%s ", mf->flags[i].name, mf->flags[i].value);
+            if (flags_len + need >= (int)sizeof(flags_line) - 1) break;
+            flags_len += snprintf(flags_line + flags_len, sizeof(flags_line) - flags_len,
+                                 "%s=%s ", mf->flags[i].name, mf->flags[i].value);
         }
+        if (flags_len > 0) {
+            flags_line[flags_len - 1] = '\0';  /* Remove trailing space */
+        }
+        tabs_draw_with_highlight(win, y++, 2, flags_line, search);
+        y++;
+    }
 
-        if (sp->has_data) {
-            /* Show first 16 bytes of Stack Page */
-            char sp_line[64];
-            int sp_len = 0;
-            sp_len += snprintf(sp_line + sp_len, sizeof(sp_line) - sp_len, "SP: ");
-            for (int i = 0; i < 16 && i < STACK_PAGE_SIZE; i++) {
-                if (sp->valid[i]) {
-                    sp_len += snprintf(sp_line + sp_len, sizeof(sp_line) - sp_len, "%02X ", sp->data[i]);
+    /* V01.1: Zero Page full dump (256 bytes = 16 lines) */
+    if (zp->has_data) {
+        draw_separator(win, y++, width, "Zero Page ($0000-$00FF)");
+
+        /* Column header */
+        wattron(win, COLOR_PAIR(COLOR_PAIR_HEADER) | A_DIM);
+        mvwprintw(win, y, 2, "     ");
+        for (int i = 0; i < 16; i++) {
+            wprintw(win, "%02X ", i);
+        }
+        wattroff(win, COLOR_PAIR(COLOR_PAIR_HEADER) | A_DIM);
+        y++;
+
+        /* 16 lines x 16 bytes = 256 bytes */
+        for (int line = 0; line < 16 && y < height - 2; line++) {
+            /* Address */
+            wattron(win, COLOR_PAIR(COLOR_PAIR_DATA));
+            mvwprintw(win, y, 2, "$%02X: ", line * 16);
+            wattroff(win, COLOR_PAIR(COLOR_PAIR_DATA));
+
+            /* Hex data */
+            char hex_line[64];
+            int hex_len = 0;
+            for (int i = 0; i < 16; i++) {
+                int idx = line * 16 + i;
+                if (zp->valid[idx]) {
+                    hex_len += snprintf(hex_line + hex_len, sizeof(hex_line) - hex_len,
+                                       "%02X ", zp->data[idx]);
                 } else {
-                    sp_len += snprintf(sp_line + sp_len, sizeof(sp_line) - sp_len, "-- ");
+                    hex_len += snprintf(hex_line + hex_len, sizeof(hex_line) - hex_len, "-- ");
                 }
             }
-            tabs_draw_with_highlight(win, y++, 2, sp_line, search);
+            tabs_draw_with_highlight(win, y, 7, hex_line, search);
+            y++;
+        }
+        y++;
+    }
+
+    /* V01.1: Stack Page full dump (256 bytes = 16 lines) */
+    if (sp->has_data) {
+        draw_separator(win, y++, width, "Stack Page ($0100-$01FF)");
+
+        /* Column header */
+        wattron(win, COLOR_PAIR(COLOR_PAIR_HEADER) | A_DIM);
+        mvwprintw(win, y, 2, "      ");
+        for (int i = 0; i < 16; i++) {
+            wprintw(win, "%02X ", i);
+        }
+        wattroff(win, COLOR_PAIR(COLOR_PAIR_HEADER) | A_DIM);
+        y++;
+
+        /* 16 lines x 16 bytes = 256 bytes */
+        for (int line = 0; line < 16 && y < height - 2; line++) {
+            /* Address */
+            wattron(win, COLOR_PAIR(COLOR_PAIR_DATA));
+            mvwprintw(win, y, 2, "$%03X: ", 0x100 + line * 16);
+            wattroff(win, COLOR_PAIR(COLOR_PAIR_DATA));
+
+            /* Hex data */
+            char hex_line[64];
+            int hex_len = 0;
+            for (int i = 0; i < 16; i++) {
+                int idx = line * 16 + i;
+                if (sp->valid[idx]) {
+                    hex_len += snprintf(hex_line + hex_len, sizeof(hex_line) - hex_len,
+                                       "%02X ", sp->data[idx]);
+                } else {
+                    hex_len += snprintf(hex_line + hex_len, sizeof(hex_line) - hex_len, "-- ");
+                }
+            }
+            tabs_draw_with_highlight(win, y, 8, hex_line, search);
+            y++;
         }
         y++;
     }
@@ -758,4 +798,106 @@ void tabs_memory_scroll_end(UIContext *ctx)
     int visible_lines = ctx->content_height - 3;
     datastore_memory_scroll_end(mem, visible_lines);
     ctx->needs_refresh = true;
+}
+
+/*
+ * =============================================================================
+ * Tab 5: Text Screen
+ * =============================================================================
+ */
+
+void tabs_draw_text(UIContext *ctx)
+{
+    WINDOW *win = ctx->win_content;
+    const TextScreenData *ts = datastore_get_textscreen(ctx->datastore);
+    const char *search = ui_get_search_term(ctx);
+    int width, height;
+    ui_get_content_size(ctx, &width, &height);
+
+    werase(win);
+
+    int y = 0;
+
+    /* Header */
+    char header[64];
+    if (ts->has_data) {
+        snprintf(header, sizeof(header), "Apple II Text Screen (Page %d)", ts->current_page);
+    } else {
+        snprintf(header, sizeof(header), "Apple II Text Screen");
+    }
+    draw_separator(win, y++, width, header);
+
+    if (!ts->has_data) {
+        mvwprintw(win, y + 1, 2, "No text screen data received yet.");
+        wrefresh(win);
+        return;
+    }
+
+    y++;
+
+    /* Draw column ruler */
+    wattron(win, COLOR_PAIR(COLOR_PAIR_HEADER) | A_DIM);
+    mvwprintw(win, y, 2, "    ");
+    for (int col = 0; col < TEXT_COLS; col += 10) {
+        wprintw(win, "%-10d", col);
+    }
+    wattroff(win, COLOR_PAIR(COLOR_PAIR_HEADER) | A_DIM);
+    y++;
+
+    /* Draw border top */
+    wattron(win, COLOR_PAIR(COLOR_PAIR_HEADER));
+    mvwprintw(win, y, 2, "   +");
+    for (int i = 0; i < TEXT_COLS; i++) {
+        waddch(win, '-');
+    }
+    waddch(win, '+');
+    wattroff(win, COLOR_PAIR(COLOR_PAIR_HEADER));
+    y++;
+
+    /* Draw text screen rows */
+    for (int row = 0; row < TEXT_ROWS && y < height - 2; row++) {
+        /* Row number */
+        wattron(win, COLOR_PAIR(COLOR_PAIR_HEADER) | A_DIM);
+        mvwprintw(win, y, 2, "%2d |", row);
+        wattroff(win, COLOR_PAIR(COLOR_PAIR_HEADER) | A_DIM);
+
+        if (ts->row_valid[row]) {
+            /* Draw text with search highlighting */
+            tabs_draw_with_highlight(win, y, 6, ts->rows[row], search);
+
+            /* Draw right border */
+            wattron(win, COLOR_PAIR(COLOR_PAIR_HEADER));
+            mvwprintw(win, y, 6 + TEXT_COLS, "|");
+            wattroff(win, COLOR_PAIR(COLOR_PAIR_HEADER));
+
+            /* Show row address */
+            wattron(win, A_DIM);
+            mvwprintw(win, y, 6 + TEXT_COLS + 2, "$%04X", ts->row_addr[row]);
+            wattroff(win, A_DIM);
+        } else {
+            /* Empty row */
+            wattron(win, A_DIM);
+            for (int i = 0; i < TEXT_COLS; i++) {
+                mvwaddch(win, y, 6 + i, '.');
+            }
+            wattroff(win, A_DIM);
+
+            wattron(win, COLOR_PAIR(COLOR_PAIR_HEADER));
+            mvwprintw(win, y, 6 + TEXT_COLS, "|");
+            wattroff(win, COLOR_PAIR(COLOR_PAIR_HEADER));
+        }
+
+        y++;
+    }
+
+    /* Draw border bottom */
+    wattron(win, COLOR_PAIR(COLOR_PAIR_HEADER));
+    mvwprintw(win, y, 2, "   +");
+    for (int i = 0; i < TEXT_COLS; i++) {
+        waddch(win, '-');
+    }
+    waddch(win, '+');
+    wattroff(win, COLOR_PAIR(COLOR_PAIR_HEADER));
+
+    wrefresh(win);
 }
