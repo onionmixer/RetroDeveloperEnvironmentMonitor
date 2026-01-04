@@ -23,6 +23,7 @@
 /* Reconnection settings */
 #define RECONNECT_INTERVAL_SEC  3
 #define RECONNECT_MAX_ATTEMPTS  0  /* 0 = unlimited */
+#define DISCONNECT_RESET_SEC    10 /* Reset data after 10 seconds of disconnect */
 
 /* Global state */
 static volatile int g_resize_pending = 0;
@@ -34,6 +35,8 @@ static UIContext g_ui;
 
 static time_t g_last_reconnect_attempt = 0;
 static int g_reconnect_attempts = 0;
+static time_t g_disconnect_time = 0;      /* Time when disconnected (0 = connected) */
+static bool g_data_reset_done = false;    /* Flag to prevent repeated resets */
 
 /* Signal handler for SIGWINCH (terminal resize) */
 static void sigwinch_handler(int signum)
@@ -213,6 +216,8 @@ static int try_connect(void)
         ui_set_status_message(&g_ui, "Connected to %s:%d",
                               g_config.debug_address, g_config.debug_port);
         g_reconnect_attempts = 0;
+        g_disconnect_time = 0;        /* Reset disconnect timer */
+        g_data_reset_done = false;    /* Reset the reset flag */
         return 0;
     }
 
@@ -360,7 +365,24 @@ int main(int argc, char **argv)
                     ui_set_connected(&g_ui, false, NULL);
                     ui_set_status_message(&g_ui, "Connection lost, will retry...");
                     logger_write_fmt(&g_logger, "Connection lost, will retry...");
+                    if (g_disconnect_time == 0) {
+                        g_disconnect_time = time(NULL);  /* Record disconnect time */
+                    }
                 }
+            }
+        }
+
+        /* Check if data reset is needed after prolonged disconnect */
+        if (g_disconnect_time > 0 && !g_data_reset_done) {
+            time_t now = time(NULL);
+            if (now - g_disconnect_time >= DISCONNECT_RESET_SEC) {
+                datastore_clear(&g_datastore);
+                g_data_reset_done = true;
+                ui_mark_dirty(&g_ui);
+                ui_set_status_message(&g_ui, "Data reset after %d seconds disconnect",
+                                      DISCONNECT_RESET_SEC);
+                logger_write_fmt(&g_logger, "Data reset after %d seconds disconnect",
+                                DISCONNECT_RESET_SEC);
             }
         }
 
